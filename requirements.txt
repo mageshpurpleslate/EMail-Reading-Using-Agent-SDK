@@ -1,0 +1,4 @@
+microsoft-agents-hosting-aiohttp
+azure-identity
+msgraph-sdk
+python-dotenv
