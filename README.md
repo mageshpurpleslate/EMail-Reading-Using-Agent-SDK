@@ -36,7 +36,12 @@ AZURE_CLIENT_SECRET=<your-client-secret>
 OUTLOOK_USER_EMAIL=<user@yourdomain.com>
 ```
 
-`OUTLOOK_USER_EMAIL` is the mailbox to read from (required for the app-only client credentials flow).
+| Variable | Where to find it |
+|---|---|
+| `AZURE_TENANT_ID` | Azure Portal → App Registrations → your app → Overview → **Directory (tenant) ID** |
+| `AZURE_CLIENT_ID` | Azure Portal → App Registrations → your app → Overview → **Application (client) ID** |
+| `AZURE_CLIENT_SECRET` | Azure Portal → App Registrations → your app → Certificates & secrets → **Client secret Value** (copy immediately after creating — it's only shown once) |
+| `OUTLOOK_USER_EMAIL` | The email address of the mailbox to read from (e.g. `user@yourdomain.com`). Required for the app-only client credentials flow. |
 
 ## Running
 
