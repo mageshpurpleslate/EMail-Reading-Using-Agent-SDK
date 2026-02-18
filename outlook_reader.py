@@ -1,83 +1,109 @@
+import json
 import os
+import sys
+from contextlib import asynccontextmanager
 
-from azure.identity import ClientSecretCredential
-from msgraph import GraphServiceClient
-from msgraph.generated.users.item.messages.messages_request_builder import (
-    MessagesRequestBuilder,
-)
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 
-def _get_graph_client() -> tuple[GraphServiceClient, str]:
-    """Create a Graph client using Azure AD client credentials."""
-    tenant_id = os.environ["AZURE_TENANT_ID"]
-    client_id = os.environ["AZURE_CLIENT_ID"]
-    client_secret = os.environ["AZURE_CLIENT_SECRET"]
-    user_email = os.environ["OUTLOOK_USER_EMAIL"]
+def _build_server_params() -> StdioServerParameters:
+    """Map AZURE_* env vars to what mcp-outlook expects and return server params."""
+    env = os.environ.copy()
+    env["CLIENT_ID"] = os.environ["AZURE_CLIENT_ID"]
+    env["CLIENT_SECRET"] = os.environ["AZURE_CLIENT_SECRET"]
+    env["TENANT_ID"] = os.environ["AZURE_TENANT_ID"]
 
-    credential = ClientSecretCredential(
-        tenant_id=tenant_id,
-        client_id=client_id,
-        client_secret=client_secret,
+    return StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "mcp_outlook_server.server"],
+        env=env,
     )
-    scopes = ["https://graph.microsoft.com/.default"]
-    client = GraphServiceClient(credentials=credential, scopes=scopes)
-    return client, user_email
+
+
+@asynccontextmanager
+async def _mcp_session():
+    """Async context manager that yields an initialized MCP ClientSession."""
+    server_params = _build_server_params()
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            yield session
 
 
 async def fetch_unread_emails(max_count: int = 5) -> list[dict]:
     """Fetch the latest unread emails from the configured Outlook mailbox.
 
-    Returns a list of dicts with keys: subject, body_text, from_address, received_at, message_id.
+    Returns a list of dicts with keys: subject, body_text, from_address,
+    received_at, message_id.
     """
-    client, user_email = _get_graph_client()
+    user_email = os.environ["OUTLOOK_USER_EMAIL"]
 
-    query_params = MessagesRequestBuilder.MessagesRequestBuilderGetQueryParameters(
-        filter="isRead eq false",
-        top=max_count,
-        orderby=["receivedDateTime desc"],
-        select=["id", "subject", "body", "from", "receivedDateTime"],
-    )
-    config = MessagesRequestBuilder.MessagesRequestBuilderGetRequestConfiguration(
-        query_parameters=query_params,
-    )
+    async with _mcp_session() as session:
+        result = await session.call_tool(
+            "Search_Outlook_Emails",
+            {
+                "user_email": user_email,
+                "query_filter": "isRead eq false",
+                "top": max_count,
+                "folders": ["Inbox"],
+            },
+        )
 
-    messages = await client.users.by_user_id(user_email).messages.get(
-        request_configuration=config,
-    )
+    emails: list[dict] = []
+    for block in result.content:
+        text = getattr(block, "text", None)
+        if not text:
+            continue
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            continue
 
-    results = []
-    if messages and messages.value:
-        for msg in messages.value:
-            from_addr = ""
-            if msg.from_ and msg.from_.email_address:
-                from_addr = msg.from_.email_address.address or ""
+        # data may be a list of emails or a single email dict
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            # mcp-outlook structured output uses Spanish field names
+            from_addr = item.get("remitente", "")
+            body_text = item.get("cuerpo", "")
+            subject = item.get("asunto", "")
+            received_at = item.get("fecha", "")
+            message_id = item.get("id", "")
 
-            body_text = ""
-            if msg.body:
-                body_text = msg.body.content or ""
+            # Fall back to English keys if present (e.g. from KQL search)
+            if not subject:
+                subject = item.get("subject", "")
+            if not from_addr:
+                from_field = item.get("from", {})
+                if isinstance(from_field, dict):
+                    email_address = from_field.get("emailAddress", {})
+                    from_addr = email_address.get("address", "")
+                elif isinstance(from_field, str):
+                    from_addr = from_field
+            if not body_text:
+                body_field = item.get("body", {})
+                if isinstance(body_field, dict):
+                    body_text = body_field.get("content", "")
+                elif isinstance(body_field, str):
+                    body_text = body_field
+            if not received_at:
+                received_at = item.get("receivedDateTime", "")
+            if not message_id:
+                message_id = item.get("id", "")
 
-            results.append(
+            emails.append(
                 {
-                    "subject": msg.subject or "",
+                    "subject": subject,
                     "body_text": body_text,
                     "from_address": from_addr,
-                    "received_at": str(msg.received_date_time or ""),
-                    "message_id": msg.id or "",
+                    "received_at": received_at,
+                    "message_id": message_id,
                 }
             )
 
-    return results
+    return emails[:max_count]
 
 
 async def mark_as_read(message_id: str) -> None:
-    """Mark a message as read in the configured Outlook mailbox."""
-    from msgraph.generated.models.message import Message
-
-    client, user_email = _get_graph_client()
-
-    request_body = Message()
-    request_body.is_read = True
-
-    await client.users.by_user_id(user_email).messages.by_message_id(
-        message_id
-    ).patch(request_body)
+    """Mark a message as read (no-op — mcp-outlook doesn't expose this tool)."""
+    pass

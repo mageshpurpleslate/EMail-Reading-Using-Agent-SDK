@@ -2,10 +2,20 @@
 
 A POC agent built with the Microsoft 365 Agents SDK (Python) that parses attendance exception emails and extracts structured data for an approval workflow.
 
+## Architecture
+
+```
+app.py → outlook_reader.py → MCP client → mcp-outlook server (subprocess) → Graph API
+```
+
+The app uses the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to communicate with
+Microsoft Graph. `outlook_reader.py` launches `mcp-outlook` as a subprocess via `StdioServerParameters`
+and calls its `Search_Outlook_Emails` tool through an MCP `ClientSession`.
+
 ## Prerequisites
 
 - Python 3.10+
-- Node.js (for the Teams App Test Tool / playground)
+- Node.js (for `mcp-outlook` server subprocess and the Teams App Test Tool / playground)
 - Azure AD App Registration with **Mail.Read** application permission
 
 ## Azure AD Setup
@@ -42,6 +52,15 @@ OUTLOOK_USER_EMAIL=<user@yourdomain.com>
 | `AZURE_CLIENT_ID` | Azure Portal → App Registrations → your app → Overview → **Application (client) ID** |
 | `AZURE_CLIENT_SECRET` | Azure Portal → App Registrations → your app → Certificates & secrets → **Client secret Value** (copy immediately after creating — it's only shown once) |
 | `OUTLOOK_USER_EMAIL` | The email address of the mailbox to read from (e.g. `user@yourdomain.com`). Required for the app-only client credentials flow. |
+
+## Dependencies
+
+| Package | Purpose |
+|---|---|
+| `microsoft-agents-hosting-aiohttp` | Microsoft 365 Agents SDK runtime |
+| `python-dotenv` | Load `.env` into environment |
+| `mcp` | MCP Python SDK (client) |
+| `mcp-outlook` | MCP server for Microsoft Outlook / Graph API |
 
 ## Running
 
@@ -108,7 +127,7 @@ Due to car breakdown, I will be approximately 2 hours late tomorrow.
 app.py              — Main entry point, agent definition
 start_server.py     — aiohttp server setup
 email_parser.py     — Attendance exception email parsing logic
-outlook_reader.py   — Microsoft Graph API email fetcher
+outlook_reader.py   — MCP client that talks to mcp-outlook server subprocess
 models.py           — Data models (AttendanceException)
 requirements.txt    — Python dependencies
 .env                — Azure AD credentials (not committed)
