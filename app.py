@@ -59,8 +59,6 @@ async def on_fetch(context: TurnContext, state: TurnState):
     match = re.match(r"^/fetch(?:\s+(\d+))?$", text)
     max_count = int(match.group(1)) if match and match.group(1) else 5
 
-    await context.send_activity(f"Fetching up to {max_count} unread emails from Outlook...")
-
     try:
         emails = await fetch_unread_emails(max_count=max_count)
     except KeyError as e:
@@ -77,8 +75,6 @@ async def on_fetch(context: TurnContext, state: TurnState):
     if not emails:
         await context.send_activity("No unread emails found in the inbox.")
         return
-
-    await context.send_activity(f"Found **{len(emails)}** unread email(s). Parsing...\n\n---")
 
     for i, email in enumerate(emails, 1):
         combined_text = f"Subject: {email['subject']}\n{email['body_text']}"
