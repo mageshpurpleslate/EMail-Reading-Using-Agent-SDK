@@ -8,7 +8,7 @@ from microsoft_agents.hosting.core.app.state import TurnState
 from microsoft_agents.hosting.core import TurnContext
 
 from email_parser import parse_attendance_exception
-from outlook_reader import fetch_unread_emails
+from outlook_reader import fetch_latest_emails
 from start_server import start
 
 load_dotenv()
@@ -60,7 +60,7 @@ async def on_fetch(context: TurnContext, state: TurnState):
     max_count = int(match.group(1)) if match and match.group(1) else 5
 
     try:
-        emails = await fetch_unread_emails(max_count=max_count)
+        emails = await fetch_latest_emails(max_count=max_count)
     except KeyError as e:
         await context.send_activity(
             f"Missing environment variable: {e}. "
@@ -73,7 +73,7 @@ async def on_fetch(context: TurnContext, state: TurnState):
         return
 
     if not emails:
-        await context.send_activity("No unread emails found in the inbox.")
+        await context.send_activity("No emails found in the inbox.")
         return
 
     for i, email in enumerate(emails, 1):

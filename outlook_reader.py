@@ -31,8 +31,8 @@ async def _mcp_session():
             yield session
 
 
-async def fetch_unread_emails(max_count: int = 5) -> list[dict]:
-    """Fetch the latest unread emails from the configured Outlook mailbox.
+async def fetch_latest_emails(max_count: int = 5) -> list[dict]:
+    """Fetch the latest emails from the configured Outlook mailbox.
 
     Returns a list of dicts with keys: subject, body_text, from_address,
     received_at, message_id.
@@ -44,7 +44,6 @@ async def fetch_unread_emails(max_count: int = 5) -> list[dict]:
             "Search_Outlook_Emails",
             {
                 "user_email": user_email,
-                "query_filter": "isRead eq false",
                 "top": max_count,
                 "folders": ["Inbox"],
             },
